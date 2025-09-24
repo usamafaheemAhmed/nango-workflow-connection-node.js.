@@ -67,8 +67,6 @@ See `.env` for required variables:
 - `NANGO_SECRET_KEY`
 - `AIRTABLE_API_TOKEN`
 - `AIRTABLE_BASE_ID`
-- `AIRTABLE_TABLE_NAME`
-- `NANGO_API_URL`
 
 ## Dependencies
 

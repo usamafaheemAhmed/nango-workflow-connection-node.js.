@@ -17,6 +17,27 @@ app.use(express.json());
 app.use(morgan("combined")); // or "dev" for local debugging
 
 // ----------------- NANGO WEBHOOK -----------------
+// helper: fetch user from Airtable Users table
+async function getUserFromAirtable(userId) {
+  const res = await fetch(
+    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Users?filterByFormula={MSpace ID}="${userId}"`,
+    {
+      headers: {
+        Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to fetch user from Airtable: ${text}`);
+  }
+
+  const data = await res.json();
+  return data.records.length > 0 ? data.records[0].fields : null;
+}
+
 // helper: save auth events to Airtable
 async function saveAuthEventToAirtable(webhookData) {
   const connectionId = webhookData.connectionId || "";
@@ -27,8 +48,38 @@ async function saveAuthEventToAirtable(webhookData) {
   const operation = webhookData.operation || "";
   const providerConfigKey = webhookData.providerConfigKey || "";
 
+  // 1. fetch user info
+  let user = null;
+  try {
+    user = await getUserFromAirtable(clientId);
+  } catch (err) {
+    console.error("⚠️ Error fetching user:", err);
+  }
+
+  // 2. build new entry
+  const recordFields = {
+    ConnectionID: connectionId,
+    Provider: provider,
+    ProviderConfigKey: providerConfigKey,
+    ClientID: clientId,
+    Status: success,
+    Environment: environment,
+    Operation: operation,
+  };
+ 
+
+  if (user) {
+    recordFields.Name = user.Name || "";
+    recordFields.Chaser = user.Chaser || "";
+    recordFields.ChaserID = user.ChaserID || "";
+    recordFields.User = user.Name || ""; // assuming Name is user’s display name
+    recordFields.UserID = user.UserID || clientId;
+    recordFields.Leads = user.Leads || "";
+  }
+
+  // 3. save into Connecters table
   const airtableRes = await fetch(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/NangoHookRes`,
+    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Connecters`,
     {
       method: "POST",
       headers: {
@@ -36,25 +87,19 @@ async function saveAuthEventToAirtable(webhookData) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        records: [
-          {
-            fields: {
-              Connection_ID: connectionId,
-              Provider: provider,
-              Provider_Config_Key: providerConfigKey,
-              Client_ID: clientId,
-              Status: success,
-              Environment: environment,
-              Operation: operation,
-            },
-          },
-        ],
+        records: [{ fields: recordFields }],
       }),
     }
   );
 
+  if (!airtableRes.ok) {
+    const text = await airtableRes.text();
+    throw new Error(`Failed to save connector: ${text}`);
+  }
+
   return await airtableRes.json();
 }
+
 
 // helper: fetch new contacts from Nango proxy
 async function fetchNewContacts(connectionId, providerConfigKey, limit = 10) {
@@ -89,6 +134,7 @@ async function saveLeadsToAirtable(leads, providerConfigKey) {
     return { success: false, message: "No leads to save" };
   }
 
+  // Map Nango lead → Airtable schema
   const buildRecord = (lead) => {
     const leadName =
       lead.first_name || lead.last_name
@@ -97,15 +143,28 @@ async function saveLeadsToAirtable(leads, providerConfigKey) {
 
     return {
       fields: {
-        Name: leadName,
-        Email: lead.email || "",
-        "Contact Number": lead.mobile_phone_number || lead.phone || "",
-        Lead_ID: lead.id || "",
-        Lead_Source: providerConfigKey,
-        Website: lead.website_url || "",
-        Job_Title: lead.job_title || "",
-        Lifecycle_Stage: lead.lifecycle_stage || "",
-        Created_Date: lead.created_date || "",
+        Imported: true,
+        Business: lead.company || "", // may come from HubSpot `company`
+        BusinessId: lead.company_id || "", // if available
+        Status: lead.lead_status || "Active",
+        "Phone Type": lead.phone_type || "Mobile",
+        Chaser: lead.owner || "", // or map from webhook user if available
+        Source: providerConfigKey,
+        SourceID: lead.source_id || "",
+        LeadType: lead.lead_type || "",
+        LeadName: leadName,
+        LeadEmail: lead.email || "",
+        LeadPhone: lead.mobile_phone_number || lead.phone || "",
+        LeadField1: lead.custom_field_1 || "",
+        LeadField2: lead.custom_field_2 || "",
+        LeadField3: lead.custom_field_3 || "",
+        "status Change": new Date().toISOString().split("T")[0],
+        Connected: new Date(lead.created_date).toISOString().split("T")[0] || "",
+        "1st Call Recording": lead.first_call_id || "",
+        "1st Call Recording Url": lead.first_call_url || "",
+        "Report Call Recording": lead.report_call_id || "",
+        "Last Call": lead.last_contacted || "",
+        "User fields": lead.user_ids ? lead.user_ids : [],
       },
     };
   };
@@ -199,7 +258,7 @@ async function sendLeadsToN8N(leads, savedRecords, providerConfigKey) {
 // check for dublications in AirTable
 async function leadExistsInAirtable(leadId) {
   const res = await fetch(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Leads?filterByFormula={Lead_ID}="${leadId}"`,
+    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Leads?filterByFormula={SourceID}="${leadId}"`,
     {
       headers: {
         Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,

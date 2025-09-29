@@ -4,6 +4,8 @@ import fetch from "node-fetch"; // install with: npm install express node-fetch
 import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
+import cors from "cors";
+
 dotenv.config();
 
 import morgan from "morgan";
@@ -13,6 +15,7 @@ const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
+app.use(cors());
 
 app.use(morgan("combined")); // or "dev" for local debugging
 

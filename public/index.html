@@ -84,15 +84,21 @@
     <div id="tools"></div>
 
     <script>
+      // ✅ Mock MemberSpace: pull email + name from URL or use defaults
       const params = new URLSearchParams(window.location.search);
-      const clientId = params.get("clientId");
-      const clientName = params.get("clientName");
+      const memberEmail = params.get("email") || "usamafaheemahmed80@gmail.com";
+      const memberName = params.get("name") || "Usama Faheem";
+      const memberId = params.get("Members_Id") || "5965254";
+
+      console.log("🧪 Using mock user:", memberEmail, memberName,memberId);
 
       async function loadTools() {
-        const res = await fetch("/tools"); // 👈 Express route
+        const res = await fetch("/tools"); // Express backend
         const tools = await res.json();
 
         const container = document.getElementById("tools");
+        container.innerHTML = "";
+
         tools.forEach((tool) => {
           const card = document.createElement("div");
           card.className = "tool-card";
@@ -112,12 +118,14 @@
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                clientId: clientId,
+                clientId: memberId, // ✅ use MemberSpace ID as unique clientId
+                clientName: memberName, // optional
+                memberEmail: memberEmail, // optional
                 toolKey: tool.key,
               }),
             });
             const data = await res.json();
-            console.log(data);
+            console.log("Session response:", data);
 
             if (!data.data || !data.data.token) {
               alert("Could not create session");
@@ -131,10 +139,10 @@
           card.appendChild(logo);
           card.appendChild(title);
           card.appendChild(btn);
-
           container.appendChild(card);
         });
       }
+
       loadTools();
     </script>
   </body>

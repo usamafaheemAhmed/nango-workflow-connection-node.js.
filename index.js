@@ -21,12 +21,12 @@ app.use(morgan("combined")); // or "dev" for local debugging
 
 // ----------------- NANGO WEBHOOK -----------------
 // helper: fetch user from Airtable Users table
-async function getUserFromAirtable(userId) {
+async function getUserFromAirtable(userEmail) {
   console.log(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Users?filterByFormula={MSpace ID}="${userId}"`
+    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Users?filterByFormula={Email}="${userEmail}"`
   );
   const res = await fetch(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Users?filterByFormula={MSpace ID}="${userId}"`,
+    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Users?filterByFormula={Email}="${userEmail}"`,
     {
       headers: {
         Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
@@ -42,7 +42,7 @@ async function getUserFromAirtable(userId) {
 
   const data = await res.json();
   console.log("---", JSON.stringify(data), "---");
-  return data.records.length > 0 ? data.records[data.records.length - 1] : null;
+  return data.records.length > 0 ? data.records[0] : null;
 }
 
 // helper: save auth events to Airtable
@@ -50,6 +50,8 @@ async function saveAuthEventToAirtable(webhookData) {
   const connectionId = webhookData.connectionId || "";
   const provider = webhookData.provider || "";
   const clientId = webhookData.endUser?.endUserId || "";
+  const clientName = webhookData.endUser?.display_name || "";
+  const memberEmail = webhookData.endUser?.email || "";
   const success = webhookData.success === true ? "CONNECTED" : "FAILED";
   const environment = webhookData.environment || "";
   const operation = webhookData.operation || "";
@@ -58,7 +60,7 @@ async function saveAuthEventToAirtable(webhookData) {
   // 1. fetch user info
   let user = null;
   try {
-    user = await getUserFromAirtable(clientId);
+    user = await getUserFromAirtable(memberEmail);
   } catch (err) {
     console.error("⚠️ Error fetching user:", err);
   }
@@ -78,14 +80,14 @@ async function saveAuthEventToAirtable(webhookData) {
   console.log("Saving auth event for user:", user);
 
   if (user) {
-    recordFields.Name = user.fields.Name || "";
+    recordFields.Name = user?.fields?.Name || "";
     recordFields.Chaser = Array.isArray(user.fields.Chaser)
       ? user.fields.Chaser
       : [];
     recordFields["Chaser ID"] = Array.isArray(user.fields["Chaser ID"])
       ? user.fields["Chaser ID"][0]
       : [];
-    // recordFields.User = user.fields.Name || ""; // assuming Name is user’s display name
+    recordFields.User = [user.id] || ""; // assuming Name is user’s display name
     recordFields["User ID"] = user.id || clientId; // use Airtable recordId, not the Mspace ID
     recordFields.Leads = user.fields.Leads || "";
   }
@@ -307,7 +309,7 @@ async function sendLeadsToN8N(leads, savedRecords, providerConfigKey) {
 
       try {
         const res = await fetch(
-          "http://n8n.leadchaser.ai/webhook/287088cf-fd50-486e-b4f6-a2c299cf734b",
+          "https://n8n.leadchaser.ai/webhook/287088cf-fd50-486e-b4f6-a2c299cf734b",
           {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -392,11 +394,11 @@ app.post("/webhook", async (req, res) => {
           );
 
           const savedRecords = airtableData.records || [];
-          // await sendLeadsToN8N(
-          //   newContacts,
-          //   savedRecords,
-          //   webhookData.providerConfigKey
-          // );
+          await sendLeadsToN8N(
+            newContacts,
+            savedRecords,
+            webhookData.providerConfigKey
+          );
 
           return res.status(200).json({
             success: true,
@@ -431,7 +433,7 @@ app.post("/webhook", async (req, res) => {
 // ----------------- CREATE SESSION -----------------
 app.post("/create-session", async (req, res) => {
   try {
-    const { clientId, toolKey } = req.body;
+    const { clientId, toolKey, clientName, memberEmail } = req.body;
 
     if (!clientId || !toolKey) {
       return res.status(400).json({ error: "Missing clientId or toolKey" });
@@ -446,7 +448,11 @@ app.post("/create-session", async (req, res) => {
         Authorization: `Bearer ${NANGO_SECRET_KEY}`,
       },
       body: JSON.stringify({
-        end_user: { id: clientId },
+        end_user: {
+          id: memberEmail,
+          display_name: clientName,
+          email: memberEmail,
+        },
         allowed_integrations: [toolKey],
       }),
     });

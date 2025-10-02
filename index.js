@@ -5,6 +5,7 @@ import path from "path";
 import { fileURLToPath } from "url";
 import dotenv from "dotenv";
 import cors from "cors";
+import axios from "axios";
 
 dotenv.config();
 
@@ -22,27 +23,30 @@ app.use(morgan("combined")); // or "dev" for local debugging
 // ----------------- NANGO WEBHOOK -----------------
 // helper: fetch user from Airtable Users table
 async function getUserFromAirtable(userEmail) {
-  console.log(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Users?filterByFormula={Email}="${userEmail}"`
-  );
-  const res = await fetch(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Users?filterByFormula={Email}="${userEmail}"`,
-    {
+  try {
+    // ✅ Always encode formula to avoid spaces/quotes breaking the URL
+    const formula = encodeURIComponent(`{Email}="${userEmail}"`);
+    const url = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Users?filterByFormula=${formula}`;
+
+    console.log("🔎 Airtable URL:", url);
+
+    const res = await axios.get(url, {
       headers: {
         Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
         "Content-Type": "application/json",
       },
-    }
-  );
+    });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to fetch user from Airtable: ${text}`);
+    console.log("---", JSON.stringify(res.data), "---");
+
+    return res.data.records.length > 0 ? res.data.records[0] : null;
+  } catch (err) {
+    console.error(
+      "❌ Failed to fetch user from Airtable:",
+      err.response?.data || err.message
+    );
+    throw err;
   }
-
-  const data = await res.json();
-  console.log("---", JSON.stringify(data), "---");
-  return data.records.length > 0 ? data.records[0] : null;
 }
 
 // helper: save auth events to Airtable
@@ -95,26 +99,33 @@ async function saveAuthEventToAirtable(webhookData) {
   console.log("Saving auth event to Airtable with fields:", recordFields);
 
   // 3. save into Connecters table
-  const airtableRes = await fetch(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Connecters`,
-    {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        records: [{ fields: recordFields }],
-      }),
-    }
-  );
+  const url = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Connecters`;
 
-  if (!airtableRes.ok) {
-    const text = await airtableRes.text();
-    throw new Error(`Failed to save connector: ${text}`);
+  try {
+    const airtableRes = await axios.post(
+      url,
+      { records: [{ fields: recordFields }] },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+
+    console.log("✅ Airtable response:", airtableRes.data);
+    return airtableRes.data;
+  } catch (err) {
+    console.error(
+      "❌ Failed to save connector:",
+      err.response?.data || err.message
+    );
+    throw new Error(
+      `Failed to save connector: ${JSON.stringify(
+        err.response?.data || err.message
+      )}`
+    );
   }
-
-  return await airtableRes.json();
 }
 
 // helper: fetch new contacts from Nango proxy
@@ -125,8 +136,8 @@ async function fetchNewContacts(connectionId, providerConfigKey, limit = 10) {
 
   const NANGO_SECRET_KEY = process.env.NANGO_SECRET_KEY;
 
-  const res = await fetch(`https://api.nango.dev/records?model=Contact`, {
-    method: "GET",
+  const res = await axios.get("https://api.nango.dev/records", {
+    params: { model: "Contact" }, // query params
     headers: {
       "provider-config-key": providerConfigKey,
       "connection-id": connectionId,
@@ -135,12 +146,8 @@ async function fetchNewContacts(connectionId, providerConfigKey, limit = 10) {
     },
   });
 
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to fetch contacts: ${text}`);
-  }
-
-  const data = await res.json();
+  // Axios automatically throws on non-2xx, so no need for res.ok check
+  const data = res.data;
   return Array.isArray(data.records) ? data.records : [];
 }
 
@@ -149,23 +156,22 @@ async function saveLeadsToAirtable(leads, providerConfigKey, connectionId) {
   if (!Array.isArray(leads) || leads.length === 0) {
     return { success: false, message: "No leads to save" };
   }
-
   // 1. Find the Connecter record ID for this connectionId
-  const connecterRes = await fetch(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Connecters?filterByFormula={Connection ID}="${connectionId}"`,
+  const connecterRes = await axios.get(
+    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Connecters`,
     {
       headers: {
         Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
       },
+      params: {
+        filterByFormula: `{Connection ID}="${connectionId}"`,
+      },
     }
   );
 
-  if (!connecterRes.ok) {
-    const text = await connecterRes.text();
-    throw new Error(`Failed to fetch Connecter: ${text}`);
-  }
+  // No need for res.ok, axios throws on error automatically
+  const connecterData = connecterRes.data;
 
-  const connecterData = await connecterRes.json();
   if (!connecterData.records || connecterData.records.length === 0) {
     throw new Error(`No Connecter found for Connection ID: ${connectionId}`);
   }
@@ -339,25 +345,26 @@ async function sendLeadsToN8N(leads, savedRecords, providerConfigKey) {
 
 // check for dublications in AirTable
 async function leadExistsInAirtable(leadId) {
-  const res = await fetch(
-    `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Leads?filterByFormula={Source ID}="${leadId}"`,
-    {
-      headers: {
-        Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-    }
-  );
-
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Airtable lookup failed: ${text}`);
+  try {
+    const res = await axios.get(
+      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Leads`,
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+        params: {
+          filterByFormula: `{Source ID}="${leadId}"`,
+        },
+      }
+    );
+    return res.data.records.length > 0;
+  } catch (err) {
+    throw new Error(
+      `Airtable lookup failed: ${err.response?.data || err.message}`
+    );
   }
-
-  const data = await res.json();
-  return data.records.length > 0;
 }
-
 // ----------------- MAIN WEBHOOK -----------------
 app.post("/webhook", async (req, res) => {
   try {

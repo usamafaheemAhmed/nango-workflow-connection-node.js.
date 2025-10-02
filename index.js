@@ -35,6 +35,7 @@ async function getUserFromAirtable(userEmail) {
         Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
         "Content-Type": "application/json",
       },
+      timeout: 20000, // ⏳ 20 seconds
     });
 
     console.log("---", JSON.stringify(res.data), "---");
@@ -110,6 +111,7 @@ async function saveAuthEventToAirtable(webhookData) {
           Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
           "Content-Type": "application/json",
         },
+        timeout: 20000, // ⏳ 20 seconds
       }
     );
 
@@ -144,6 +146,7 @@ async function fetchNewContacts(connectionId, providerConfigKey, limit = 10) {
       Authorization: `Bearer ${NANGO_SECRET_KEY}`,
       "Content-Type": "application/json",
     },
+    timeout: 20000, // ⏳ 20 seconds
   });
 
   // Axios automatically throws on non-2xx, so no need for res.ok check
@@ -163,6 +166,7 @@ async function saveLeadsToAirtable(leads, providerConfigKey, connectionId) {
       headers: {
         Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
       },
+      timeout: 20000, // ⏳ 20 seconds
       params: {
         filterByFormula: `{Connection ID}="${connectionId}"`,
       },
@@ -223,25 +227,31 @@ async function saveLeadsToAirtable(leads, providerConfigKey, connectionId) {
   for (const chunk of chunks) {
     const records = chunk.map(buildRecord);
 
-    const res = await fetch(
-      `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Leads`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ records }),
-      }
-    );
+    try {
+      const res = await axios.post(
+        `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Leads`,
+        { records },
+        {
+          headers: {
+            Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
+            "Content-Type": "application/json",
+          },
+          timeout: 20000, // ⏳ 20 seconds
+        }
+      );
 
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`Airtable insert failed: ${text}`);
+      allResults.push(...res.data.records);
+    } catch (err) {
+      console.error(
+        "❌ Airtable insert failed:",
+        err.response?.data || err.message
+      );
+      throw new Error(
+        `Airtable insert failed: ${JSON.stringify(
+          err.response?.data || err.message
+        )}`
+      );
     }
-
-    const data = await res.json();
-    allResults.push(...data.records);
   }
 
   return {
@@ -314,35 +324,34 @@ async function sendLeadsToN8N(leads, savedRecords, providerConfigKey) {
           : lead.email || "Unknown Lead";
 
       try {
-        const res = await fetch(
+        const res = await axios.post(
           "https://n8n.leadchaser.ai/webhook/287088cf-fd50-486e-b4f6-a2c299cf734b",
           {
-            method: "POST",
+            "Chaser ID": rec.id,
+            "Lead Source": providerConfigKey,
+            "Lead Name": leadName,
+            "Lead Email": lead.email || "",
+            "Lead Phone": lead.mobile_phone_number || lead.phone || "",
+            "Lead ID": lead.id || "",
+          },
+          {
             headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              "Chaser ID": rec.id,
-              "Lead Source": providerConfigKey,
-              "Lead Name": leadName,
-              "Lead Email": lead.email || "",
-              "Lead Phone": lead.mobile_phone_number || lead.phone || "",
-              "Lead ID": lead.id || "",
-            }),
+            timeout: 20000, // ⏳ 20 seconds
           }
         );
 
-        if (!res.ok) {
-          const text = await res.text();
-          console.error(`❌ Failed to send lead ${lead.id} to n8n: ${text}`);
-        } else {
-          console.log(`✅ Lead ${lead.id} sent to n8n`);
-        }
+        console.log(`✅ Lead ${lead.id} sent to n8n`);
+        return res.data;
       } catch (err) {
-        console.error(`❌ Error sending lead ${lead.id} to n8n:`, err);
+        console.error(
+          `❌ Failed to send lead ${lead.id} to n8n:`,
+          err.response?.data || err.message
+        );
+        return null;
       }
     })
   );
 }
-
 // check for dublications in AirTable
 async function leadExistsInAirtable(leadId) {
   try {
@@ -353,6 +362,7 @@ async function leadExistsInAirtable(leadId) {
           Authorization: `Bearer ${process.env.AIRTABLE_API_TOKEN}`,
           "Content-Type": "application/json",
         },
+        timeout: 20000, // ⏳ 20 seconds
         params: {
           filterByFormula: `{Source ID}="${leadId}"`,
         },

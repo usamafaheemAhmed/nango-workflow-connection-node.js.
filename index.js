@@ -266,7 +266,7 @@ async function saveLeadToAirtable(lead, providerConfigKey) {
     return { success: false, message: "No lead provided" };
   }
 
-  console.log("Lead to save:", lead[0]);
+  console.log("Lead to save:", lead);
   // return false
   // Map Nango lead → Airtable schema
   const buildRecord = (lead) => {
@@ -290,7 +290,7 @@ async function saveLeadToAirtable(lead, providerConfigKey) {
   };
 
   // Save to Airtable
-  const record = buildRecord(lead[0]);
+  const record = buildRecord(Array.isArray(lead) ? lead[0] : lead);
   const res = await fetch(
     `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Leads`,
     {
@@ -378,6 +378,20 @@ async function leadExistsInAirtable(leadId) {
 // ----------------- MAIN WEBHOOK -----------------
 app.post("/webhook", async (req, res) => {
   try {
+    console.log("🌍 ENV Check:");
+    console.log(
+      "NANGO_SECRET_KEY:",
+      process.env.NANGO_SECRET_KEY ? "✅ Loaded" : "❌ Missing"
+    );
+    console.log(
+      "AIRTABLE_API_TOKEN:",
+      process.env.AIRTABLE_API_TOKEN ? "✅ Loaded" : "❌ Missing"
+    );
+    console.log(
+      "AIRTABLE_BASE_ID:",
+      process.env.AIRTABLE_BASE_ID ? "✅ Loaded" : "❌ Missing"
+    );
+
     const webhookData = req.body;
     // console.log("Nango webhook received:", webhookData);
 

@@ -131,7 +131,12 @@ async function saveAuthEventToAirtable(webhookData) {
 }
 
 // helper: fetch new contacts from Nango proxy
-async function fetchNewContacts(connectionId, providerConfigKey, limit = 10) {
+async function fetchNewContacts(
+  connectionId,
+  providerConfigKey,
+  limit = 10,
+  model
+) {
   if (!connectionId || !providerConfigKey) {
     throw new Error("Missing connectionId or providerConfigKey");
   }
@@ -139,7 +144,7 @@ async function fetchNewContacts(connectionId, providerConfigKey, limit = 10) {
   const NANGO_SECRET_KEY = process.env.NANGO_SECRET_KEY;
 
   const res = await axios.get("https://api.nango.dev/records", {
-    params: { model: "Contact" }, // query params
+    params: { model: model }, // query params
     headers: {
       "provider-config-key": providerConfigKey,
       "connection-id": connectionId,
@@ -404,7 +409,7 @@ app.post("/webhook", async (req, res) => {
     }
 
     // Handle sync events
-    if (webhookData.type === "sync" && webhookData.model === "Contact") {
+    if (webhookData.type === "sync") {
       console.log("✅ Nango sync:", webhookData);
 
       if (
@@ -414,7 +419,8 @@ app.post("/webhook", async (req, res) => {
         const newContacts = await fetchNewContacts(
           webhookData.connectionId,
           webhookData.providerConfigKey,
-          webhookData.responseResults.added
+          webhookData.responseResults.added,
+          webhookData.model
         );
 
         if (newContacts.length > 0) {

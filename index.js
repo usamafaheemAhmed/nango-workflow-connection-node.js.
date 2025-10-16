@@ -504,6 +504,7 @@ app.post("/create-session", async (req, res) => {
 
 // ----------------- FETCH TOOLS -----------------
 app.get("/tools", async (req, res) => {
+  console.log(process.env.NANGO_SECRET_KEY, "just to check correct key");
   try {
     const response = await fetch("https://api.nango.dev/integrations", {
       headers: {

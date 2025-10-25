@@ -56,7 +56,7 @@ async function saveAuthEventToAirtable(webhookData) {
   const provider = webhookData.provider || "";
   const clientId = webhookData.endUser?.endUserId || "";
   const clientName = webhookData.endUser?.display_name || "";
-  const memberEmail = webhookData.endUser?.email || "";
+  const memberEmail = webhookData.endUser?.endUserId || "";
   const success = webhookData.success === true ? "CONNECTED" : "FAILED";
   const environment = webhookData.environment || "";
   const operation = webhookData.operation || "";

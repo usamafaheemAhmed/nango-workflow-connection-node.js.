@@ -398,7 +398,7 @@ app.post("/webhook", async (req, res) => {
     );
 
     const webhookData = req.body;
-    // console.log("Nango webhook received:", webhookData);
+    console.log("Nango webhook received:", webhookData);
 
     // Handle provider webhook
     if (webhookData.from === "nango" && webhookData.type === "webhook") {
@@ -471,6 +471,7 @@ app.post("/webhook", async (req, res) => {
 app.post("/create-session", async (req, res) => {
   try {
     const { clientId, toolKey, clientName, memberEmail } = req.body;
+    console.log("Creating Session of: { clientId:",clientId, "ToolKey:",toolKey, "clientName:",clientName, "memberEmail:",memberEmail);
 
     if (!clientId || !toolKey) {
       return res.status(400).json({ error: "Missing clientId or toolKey" });

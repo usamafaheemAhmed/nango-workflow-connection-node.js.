@@ -1,103 +1,114 @@
 <style>
+
   .mainDiv {
     font-family: "Lato", sans-serif;
-    background-color: #f8f9fa;
+    background: transparent;
     margin: 0;
-    padding: 10px 0 40px;
+    padding: 0;
     display: flex;
     flex-direction: column;
     align-items: center;
     justify-content: flex-start;
-    min-height: 100vh;
   }
-
   h2 {
-    margin: 25px 0 20px;
-    font-size: 24px;
-    font-weight: 600;
-    color: #333;
+    margin: 15px 0 20px;
+    font-size: 22px;
+    font-weight: 700;
+    color: #111;
+    text-align: center;
   }
-
   #Nango_tools {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 18px;
+    grid-template-columns: repeat(auto-fit, minmax(85px, 1fr));
+    gap: 16px;
     width: 100%;
-    max-width: 700px;
-    padding: 0 20px;
+    max-width: 420px;
+    padding: 0 5px 20px;
     justify-items: center;
+    align-items: center;
   }
-
   .tool-card {
     background: #fff;
-    border-radius: 10px;
-    padding: 15px 10px 20px;
+    border: 1.5px solid #e2e2e2;
+    border-radius: 12px;
+    width: 90px;
+    height: 90px;
     text-align: center;
-    width: 190px;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.07);
+    cursor: pointer;
     transition: all 0.25s ease;
     display: flex;
     flex-direction: column;
+    justify-content: center;
     align-items: center;
+    color: #999;
   }
-
-  .tool-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 6px 14px rgba(0, 0, 0, 0.12);
-  }
-
   .tool-card img {
-    width: 45px;
-    height: 45px;
+    width: 30px;
+    height: 30px;
     object-fit: contain;
-    margin-bottom: 10px;
+    filter: grayscale(1);
+    opacity: 0.6;
+    transition: all 0.25s ease;
   }
-
-  .tool-card h3 {
-    font-size: 15px;
+  .tool-card span {
+    font-size: 11.5px;
     font-weight: 600;
-    color: #333;
-    margin: 8px 0 12px;
-    line-height: 1.3;
-    text-align: center;
+    color: #777;
+    margin-top: 6px;
+    line-height: 1.25;
+    transition: color 0.25s ease;
+    width: 90%;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
-
-  .tool-btn {
-    background-color: #e16f56;
-    color: white;
-    border: none;
-    width: 100%;
-    padding: 8px 0;
-    border-radius: 6px;
-    font-size: 14px;
-    cursor: pointer;
-    transition: background-color 0.2s ease, transform 0.1s ease;
+  .tool-card:hover {
+    border-color: #007bff;
+    box-shadow: 0 4px 10px rgba(0, 123, 255, 0.15);
+    transform: translateY(-3px);
+    color: #222;
   }
-
-  .tool-btn:hover {
-    background-color: #28a745;
-    transform: scale(1.03);
+  .tool-card:hover img {
+    filter: grayscale(0);
+    opacity: 1;
+    transform: scale(1.08);
   }
-
-  /* Optional subtle animation for cards on load */
+  .tool-card:hover span {
+    color: #007bff;
+  }
+  /* Entrance animation */
   .tool-card {
     opacity: 0;
-    transform: translateY(10px);
+    transform: translateY(6px);
     animation: fadeInUp 0.3s forwards;
   }
-
   @keyframes fadeInUp {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
     to {
       opacity: 1;
       transform: translateY(0);
     }
   }
+  /* Responsive fine-tuning for modal */
+  @media (max-width: 480px) {
+    #Nango_tools {
+      grid-template-columns: repeat(auto-fit, minmax(75px, 1fr));
+      gap: 12px;
+      max-width: 350px;
+    }
+    .tool-card {
+      width: 80px;
+      height: 80px;
+      border-radius: 10px;
+    }
+    .tool-card img {
+      width: 26px;
+      height: 26px;
+    }
+    .tool-card h3 {
+      font-size: 10.5px;
+    }
+  }
 </style>
-
 <div class="mainDiv">
   <h2>Available Tools</h2>
   <div id="Nango_tools"></div>
@@ -107,15 +118,12 @@
     // ✅ Prevent redeclaration if script runs again
     if (window.NangoToolsInitialized) return;
     window.NangoToolsInitialized = true;
-
     // --- Define global variables only once ---
     window.memberId = window.memberId || null;
     window.memberEmailCustom = window.memberEmailCustom || null;
     window.memberNameCustom = window.memberNameCustom || null;
-
     async function getMemberInfo() {
       console.log("🚀 getMemberInfo() called...");
-
       // 🧩 Ensure MemberSpace is ready
       if (
         !window.MemberSpace ||
@@ -126,33 +134,27 @@
         );
         return null;
       }
-
       try {
         console.log("📡 Calling window.MemberSpace.getMemberInfo()...");
         const info = await window.MemberSpace.getMemberInfo();
         console.log("✅ Raw MemberSpace response:", info);
-
         // 🧠 Handle structure with { isLoggedIn, memberInfo }
         const member = info?.memberInfo || info;
-
         if (!member || !member.email) {
           console.warn("⚠️ Member info missing or incomplete:", member);
           return null;
         }
-
         // ✅ Assign to globals
         window.memberId = member.id;
         window.memberEmailCustom = member.email;
         window.memberNameCustom = `${member.firstName || ""} ${
           member.lastName || ""
         }`.trim();
-
         console.log("🎯 Extracted member data:", {
           id: window.memberId,
           email: window.memberEmailCustom,
           name: window.memberNameCustom,
         });
-
         // Return object for use in Connect flow
         return {
           memberId: window.memberId,
@@ -164,61 +166,38 @@
         return null;
       }
     }
-
     async function loadTools() {
-      console.log(
-        window.memberId,
-        window.MemberSpace,
-        await window.MemberSpace.getMemberInfo()
-      );
       const res = await fetch(
         "https://leadchaser-nango-5lptm.ondigitalocean.app/tools"
       );
       const tools = await res.json();
       const container = document.getElementById("Nango_tools");
       container.innerHTML = ""; // 🧹 clear before re-render
-
       tools.forEach((tool) => {
         const card = document.createElement("div");
         card.className = "tool-card";
-
         const logo = document.createElement("img");
         logo.src = tool.logo;
         logo.alt = tool.name;
-
-        const title = document.createElement("h3");
+        const title = document.createElement("span");
         title.textContent = tool.name;
-
-        const btn = document.createElement("button");
-        btn.className = "tool-btn";
-        btn.textContent = `Connect`;
-        btn.onclick = async () => {
+        card.appendChild(logo);
+        card.appendChild(title);
+        // 👇 On click, same connect logic
+        card.onclick = async () => {
           console.log("🟠 Connect button clicked for tool:", tool.name);
-
           try {
-            // 1️⃣ Get Member Info
-            console.log("⏳ Fetching MemberSpace user info...");
             const user = await getMemberInfo();
-            console.log("✅ Member info received:", user);
-
             if (!user || !user.memberId) {
-              console.warn("⚠️ Member not identified yet.");
-              alert(
-                "Member not identified yet. Please log in to MemberSpace first."
-              );
+              alert("Please log in to MemberSpace first.");
               return;
             }
-
-            // 2️⃣ Create Nango session
-            console.log("📡 Sending request to backend /create-session...");
             const payload = {
               clientId: user.memberId,
               clientName: user.memberNameCustom,
               memberEmail: user.memberEmailCustom,
               toolKey: tool.key,
             };
-            console.log("🧾 Payload being sent:", payload);
-
             const res = await fetch(
               "https://leadchaser-nango-5lptm.ondigitalocean.app/create-session",
               {
@@ -227,56 +206,22 @@
                 body: JSON.stringify(payload),
               }
             );
-
-            console.log("📥 Raw response object:", res);
-
-            if (!res.ok) {
-              const errorText = await res.text();
-              console.error(
-                "❌ Backend returned error:",
-                res.status,
-                errorText
-              );
-              alert(`Server error: ${res.status}`);
-              return;
-            }
-
-            // 3️⃣ Parse JSON response
+            if (!res.ok) throw new Error(await res.text());
             const data = await res.json();
-            console.log("📦 Parsed backend response:", data);
-
-            // Handle multiple possible structures
             const sessionToken = data?.data?.token || data?.token;
-            console.log("🔑 Extracted session token:", sessionToken);
-
-            if (!sessionToken) {
-              console.warn("⚠️ No session token found in response!");
-              alert("Could not create session (missing token).");
-              return;
-            }
-
-            // 4️⃣ Redirect user
-            const nangoUrl = `https://connect.nango.dev?session_token=${sessionToken}`;
-            console.log("🌍 Redirecting to Nango Connect:", nangoUrl);
-
-            // Some modals block navigation, so we use window.open for safety
-            window.open(nangoUrl, "_blank");
-            console.log(
-              "✅ Redirect executed successfully (opened in new tab)."
+            if (!sessionToken) throw new Error("Missing token");
+            window.open(
+              `https://connect.nango.dev?session_token=${sessionToken}`,
+              "_blank"
             );
           } catch (err) {
-            console.error("🔥 Unexpected error during connect flow:", err);
+            console.error("🔥 Error:", err);
             alert("An unexpected error occurred. Check console for details.");
           }
         };
-
-        card.appendChild(logo);
-        card.appendChild(title);
-        card.appendChild(btn);
         container.appendChild(card);
       });
     }
-
     loadTools();
   })();
 </script>

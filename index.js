@@ -70,6 +70,8 @@ async function saveAuthEventToAirtable(webhookData) {
     console.error("⚠️ Error fetching user:", err);
   }
 
+  console.log(user)
+
   // 2. build new entry
   const recordFields = {
     "Connection ID": connectionId,

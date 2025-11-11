@@ -56,7 +56,7 @@ async function saveAuthEventToAirtable(webhookData) {
   const provider = webhookData.provider || "";
   const clientId = webhookData.endUser?.endUserId || "";
   const clientName = webhookData.endUser?.display_name || "";
-  const memberEmail = webhookData.endUser?.email || "";
+  const memberEmail = webhookData.endUser?.endUserId || "";
   const success = webhookData.success === true ? "CONNECTED" : "FAILED";
   const environment = webhookData.environment || "";
   const operation = webhookData.operation || "";
@@ -143,14 +143,14 @@ async function fetchNewContacts(
     throw new Error("Missing connectionId or providerConfigKey");
   }
 
-  const NANGO_SECRET_KEY = process.env.NANGO_SECRET_KEY;
+  const NANGO_SECRET_KEY_PROD = process.env.NANGO_SECRET_KEY_PROD;
 
   const res = await axios.get("https://api.nango.dev/records", {
     params: { model: model }, // query params
     headers: {
       "provider-config-key": providerConfigKey,
       "connection-id": connectionId,
-      Authorization: `Bearer ${NANGO_SECRET_KEY}`,
+      Authorization: `Bearer ${NANGO_SECRET_KEY_PROD}`,
       "Content-Type": "application/json",
     },
     timeout: 20000, // ⏳ 20 seconds
@@ -387,8 +387,8 @@ app.post("/webhook", async (req, res) => {
   try {
     console.log("🌍 ENV Check:");
     console.log(
-      "NANGO_SECRET_KEY:",
-      process.env.NANGO_SECRET_KEY ? "✅ Loaded" : "❌ Missing"
+      "NANGO_SECRET_KEY_PROD:",
+      process.env.NANGO_SECRET_KEY_PROD ? "✅ Loaded" : "❌ Missing"
     );
     console.log(
       "AIRTABLE_API_TOKEN:",
@@ -400,7 +400,7 @@ app.post("/webhook", async (req, res) => {
     );
 
     const webhookData = req.body;
-    // console.log("Nango webhook received:", webhookData);
+    console.log("Nango webhook received:", webhookData);
 
     // Handle provider webhook
     if (webhookData.from === "nango" && webhookData.type === "webhook") {
@@ -473,18 +473,19 @@ app.post("/webhook", async (req, res) => {
 app.post("/create-session", async (req, res) => {
   try {
     const { clientId, toolKey, clientName, memberEmail } = req.body;
+    console.log("Creating Session of: { clientId:",clientId, "ToolKey:",toolKey, "clientName:",clientName, "memberEmail:",memberEmail);
 
     if (!clientId || !toolKey) {
       return res.status(400).json({ error: "Missing clientId or toolKey" });
     }
 
-    const NANGO_SECRET_KEY = process.env.NANGO_SECRET_KEY;
+    const NANGO_SECRET_KEY_PROD = process.env.NANGO_SECRET_KEY_PROD;
 
     const response = await fetch("https://api.nango.dev/connect/sessions", {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${NANGO_SECRET_KEY}`,
+        Authorization: `Bearer ${NANGO_SECRET_KEY_PROD}`,
       },
       body: JSON.stringify({
         end_user: {
@@ -506,10 +507,11 @@ app.post("/create-session", async (req, res) => {
 
 // ----------------- FETCH TOOLS -----------------
 app.get("/tools", async (req, res) => {
+  console.log(process.env.NANGO_SECRET_KEY_PROD, "just to check correct key");
   try {
     const response = await fetch("https://api.nango.dev/integrations", {
       headers: {
-        Authorization: `Bearer ${process.env.NANGO_SECRET_KEY}`,
+        Authorization: `Bearer ${process.env.NANGO_SECRET_KEY_PROD}`,
         "Content-Type": "application/json",
       },
     });

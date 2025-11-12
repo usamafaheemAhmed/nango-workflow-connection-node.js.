@@ -70,8 +70,6 @@ async function saveAuthEventToAirtable(webhookData) {
     console.error("⚠️ Error fetching user:", err);
   }
 
-  console.log(user)
-
   // 2. build new entry
   const recordFields = {
     "Connection ID": connectionId,
@@ -83,8 +81,6 @@ async function saveAuthEventToAirtable(webhookData) {
     Operation: operation,
     Created: new Date().toISOString().split("T")[0],
   };
-
-  console.log("Saving auth event for user:", user);
 
   if (user) {
     recordFields.Name = user?.fields?.Name || "";
@@ -98,8 +94,6 @@ async function saveAuthEventToAirtable(webhookData) {
     recordFields["User ID"] = user.id || clientId; // use Airtable recordId, not the Mspace ID
     recordFields.Leads = user.fields.Leads || "";
   }
-
-  console.log("Saving auth event to Airtable with fields:", recordFields);
 
   // 3. save into Connecters table
   const url = `https://api.airtable.com/v0/${process.env.AIRTABLE_BASE_ID}/Connecters`;
@@ -142,15 +136,14 @@ async function fetchNewContacts(
   if (!connectionId || !providerConfigKey) {
     throw new Error("Missing connectionId or providerConfigKey");
   }
-
-  const NANGO_SECRET_KEY_PROD = process.env.NANGO_SECRET_KEY_PROD;
+  const NANGO_SECRET_KEY = process.env.NANGO_SECRET_KEY_PROD;
 
   const res = await axios.get("https://api.nango.dev/records", {
     params: { model: model }, // query params
     headers: {
       "provider-config-key": providerConfigKey,
       "connection-id": connectionId,
-      Authorization: `Bearer ${NANGO_SECRET_KEY_PROD}`,
+      Authorization: `Bearer ${NANGO_SECRET_KEY}`,
       "Content-Type": "application/json",
     },
     timeout: 20000, // ⏳ 20 seconds
@@ -180,11 +173,25 @@ async function saveLeadsToAirtable(leads, providerConfigKey, connectionId) {
     }
   );
 
+  console.log("connecterRes.data", connecterRes.data);
+
   // No need for res.ok, axios throws on error automatically
   const connecterData = connecterRes.data;
 
   if (!connecterData.records || connecterData.records.length === 0) {
     throw new Error(`No Connecter found for Connection ID: ${connectionId}`);
+  }
+
+  const userTableData = await getUserFromAirtable(
+    connecterData.records[0].fields?.["Client ID"]
+  );
+
+  console.log("User Table", userTableData, Object.keys(userTableData).length);
+
+  if (Object.keys(userTableData).length == 0) {
+    throw new Error(
+      `1 No user Data found for Email: ${connecterData.records[0].fields?.["Client ID"]}`
+    );
   }
 
   const connecterRecordId = connecterData.records[0].id;
@@ -206,6 +213,10 @@ async function saveLeadsToAirtable(leads, providerConfigKey, connectionId) {
         "Lead Phone": lead.mobile_phone_number || lead.phone || "",
         Source: providerConfigKey,
         "Source ID": lead.id || "",
+        Chaser: connecterData.records[0].fields.Chaser || "",
+        Business: userTableData?.fields?.Business || "",
+        // "Business ID": userTableData?.fields?.["Business ID"][0] || "",
+        Chaser: connecterData.records[0].fields.Chaser || "",
         Connecters: [connecterRecordId], // ✅ Link lead to Connecter
       },
     };
@@ -217,6 +228,7 @@ async function saveLeadsToAirtable(leads, providerConfigKey, connectionId) {
     const exists = await leadExistsInAirtable(lead.id);
     if (!exists) freshLeads.push(lead);
   }
+  console.log("fresh leads", freshLeads);
 
   if (freshLeads.length === 0) {
     return { success: true, message: "No new unique leads" };
@@ -260,6 +272,8 @@ async function saveLeadsToAirtable(leads, providerConfigKey, connectionId) {
       );
     }
   }
+
+  console.log("all stored leads in airtable", allResults);
 
   return {
     success: true,
@@ -418,19 +432,23 @@ app.post("/webhook", async (req, res) => {
         webhookData.responseResults &&
         webhookData.responseResults.added > 0
       ) {
+        console.log("🔄 Fetching new contacts");
         const newContacts = await fetchNewContacts(
           webhookData.connectionId,
           webhookData.providerConfigKey,
           webhookData.responseResults.added,
           webhookData.model
         );
+        console.log("✅ Fetching new contacts done");
 
         if (newContacts.length > 0) {
+          console.log("🔄 saving leads air table");
           const airtableData = await saveLeadsToAirtable(
             newContacts,
             webhookData.providerConfigKey,
             webhookData.connectionId
           );
+          console.log("✅ saving leads air table done");
 
           const savedRecords = airtableData.records || [];
           await sendLeadsToN8N(
@@ -473,7 +491,16 @@ app.post("/webhook", async (req, res) => {
 app.post("/create-session", async (req, res) => {
   try {
     const { clientId, toolKey, clientName, memberEmail } = req.body;
-    console.log("Creating Session of: { clientId:",clientId, "ToolKey:",toolKey, "clientName:",clientName, "memberEmail:",memberEmail);
+    console.log(
+      "Creating Session of: { clientId:",
+      clientId,
+      "ToolKey:",
+      toolKey,
+      "clientName:",
+      clientName,
+      "memberEmail:",
+      memberEmail
+    );
 
     if (!clientId || !toolKey) {
       return res.status(400).json({ error: "Missing clientId or toolKey" });

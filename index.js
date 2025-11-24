@@ -151,7 +151,26 @@ async function fetchNewContacts(
 
   // Axios automatically throws on non-2xx, so no need for res.ok check
   const data = res.data;
-  return Array.isArray(data.records) ? data.records : [];
+  // console.log("Lead ", data);
+  // return Array.isArray(data.records) ? data.records : [];
+
+  const records = Array.isArray(data.records) ? data.records : [];
+
+  // ✅ Filter only those records that have a phone number field
+  const filtered = records.filter((rec) => {
+    const phone =
+      rec?.phone ||
+      rec?.mobile_phone_number ||
+      rec?.mobilePhoneNumber ||
+      rec?.mobile ||
+      rec?.phone_number ||
+      rec?.Phone ||
+      rec?.Mobile;
+
+    return Boolean(phone);
+  });
+
+  return filtered.slice(0, limit);
 }
 
 // helper: save leads to Airtable
